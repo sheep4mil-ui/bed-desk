@@ -21,12 +21,12 @@ through the internet. A new PIN is generated every time it starts.
 1. Double-click **Start Bed Desk - Cellular.bat**.
 2. On the first run, wait while the secure tunnel helper downloads.
 3. Open the permanent Bed Desk GitHub website on your phone.
-4. Paste the temporary connection address shown on the PC.
-5. Enter the six-digit PIN.
+4. Enter the eight-character code shown on the PC.
 
-Cellular mode works from any internet connection. Its long, random web address
-and PIN are regenerated each time. Do not share either one. Closing the PC
-window immediately stops the controller and the tunnel.
+The launcher opens a small setup tab on the PC; keep that tab and the launcher
+window open. Cellular mode works from any internet connection. Its pairing code,
+private tunnel address, and PIN are regenerated each time. Do not share the
+pairing code. Closing the PC window immediately stops the controller and tunnel.
 
 The same controller page is also included as `index.html` for GitHub Pages.
 

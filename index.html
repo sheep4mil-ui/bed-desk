@@ -47,9 +47,9 @@
     <div class="card">
       <div class="dot" style="margin:0 auto 20px"></div>
       <h1>Bed Desk</h1>
-      <p id="loginHelp">Enter the connection address and PIN shown on your PC.</p>
+      <p id="loginHelp">Enter the code shown on your PC.</p>
       <input class="pin" id="server" type="url" inputmode="url" placeholder="https://…trycloudflare.com/…" style="font-size:.9rem;letter-spacing:0;text-align:left;margin-bottom:10px">
-      <input class="pin" id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+      <input class="pin" id="pin" inputmode="text" maxlength="9" placeholder="ABCD EFGH" autocomplete="one-time-code">
       <button class="connect" id="connect">Connect</button>
       <p id="loginError"></p>
     </div>
@@ -70,8 +70,11 @@
       <div class="status" id="status">Connected over local Wi-Fi</div>
     </div>
   </main>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
   <script>
     const hosted = location.hostname.endsWith('github.io');
+    const fragment = new URLSearchParams(location.hash.slice(1));
+    const hostMode = hosted && fragment.has('host');
     let pin = sessionStorage.getItem('bedDeskPin') || '';
     let server = hosted ? (sessionStorage.getItem('bedDeskServer') || '') : '';
     const $ = s => document.querySelector(s);
@@ -79,8 +82,11 @@
     if (!hosted) {
       $('#server').classList.add('hidden');
       $('#loginHelp').textContent = 'Enter the PIN shown on your PC.';
+      $('#pin').inputMode = 'numeric';
+      $('#pin').maxLength = 6;
+      $('#pin').placeholder = '••••••';
     } else {
-      $('#server').value = server;
+      $('#server').classList.add('hidden');
     }
     async function action(data, quiet=false) {
       try {
@@ -92,12 +98,22 @@
       } catch(e) { if(!quiet) status.textContent=e.message; return false; }
     }
     async function connect() {
-      pin = $('#pin').value.trim();
       if (hosted) {
-        server = $('#server').value.trim();
-        if (!/^https:\/\/.+\/$/i.test(server)) { $('#loginError').textContent='Paste the complete HTTPS address, including the final slash.'; return; }
+        const code = $('#pin').value.replace(/[^a-z0-9]/gi,'').toLowerCase();
+        if (code.length !== 8) { $('#loginError').textContent='Enter all eight characters.'; return; }
+        $('#loginError').textContent='Finding your PC…';
+        try {
+          const pairing = await getPairing(code);
+          server = pairing.server;
+          pin = pairing.pin;
+        } catch (error) {
+          $('#loginError').textContent=error.message;
+          return;
+        }
+      } else {
+        pin = $('#pin').value.trim();
+        if (!/^\d{6}$/.test(pin)) { $('#loginError').textContent='Enter all six digits.'; return; }
       }
-      if (!/^\d{6}$/.test(pin)) { $('#loginError').textContent='Enter all six digits.'; return; }
       if (await action({type:'move',dx:0,dy:0},true)) {
         sessionStorage.setItem('bedDeskPin',pin);
         if (hosted) sessionStorage.setItem('bedDeskServer',server);
@@ -106,7 +122,36 @@
       else $('#loginError').textContent='That PIN did not work.';
     }
     $('#connect').onclick=connect; $('#pin').onkeydown=e=>{if(e.key==='Enter')connect()};
-    if (/^\d{6}$/.test(pin) && (!hosted || server)) login.classList.add('hidden');
+    if (!hosted && /^\d{6}$/.test(pin)) login.classList.add('hidden');
+
+    function getPairing(code) {
+      return new Promise((resolve,reject) => {
+        const peer = new Peer();
+        const timer = setTimeout(()=>{ peer.destroy(); reject(new Error('PC not found. Check the code and keep its setup tab open.')); },12000);
+        peer.on('open',()=>{
+          const connection=peer.connect(`bed-${code}`,{reliable:true});
+          connection.on('data',data=>{
+            if(data?.server && data?.pin){
+              clearTimeout(timer); connection.close(); peer.destroy(); resolve(data);
+            }
+          });
+          connection.on('error',()=>{});
+        });
+        peer.on('error',()=>{ clearTimeout(timer); peer.destroy(); reject(new Error('PC not found. Check the code and try again.')); });
+      });
+    }
+
+    if (hostMode) {
+      const code = fragment.get('host').toLowerCase();
+      const hostServer = fragment.get('server');
+      const hostPin = fragment.get('pin');
+      history.replaceState(null,'',location.pathname);
+      $('.card').innerHTML='<div class="dot" style="margin:0 auto 20px"></div><h1>PC ready</h1><p>On your phone, open this same website and enter:</p><div class="pin" style="font-weight:800">'+code.toUpperCase().replace(/(.{4})/,'$1 ')+'</div><p id="hostStatus">Registering this PC…</p>';
+      const hostPeer = new Peer(`bed-${code}`);
+      hostPeer.on('open',()=>$('#hostStatus').textContent='Ready — keep this tab open');
+      hostPeer.on('connection',connection=>connection.on('open',()=>connection.send({server:hostServer,pin:hostPin})));
+      hostPeer.on('error',()=>$('#hostStatus').textContent='Could not register. Restart cellular mode.');
+    }
     document.querySelectorAll('[data-click]').forEach(b=>b.onclick=()=>action({type:'click',button:b.dataset.click}));
     document.querySelectorAll('[data-key]').forEach(b=>b.onclick=()=>action({type:'key',key:b.dataset.key}));
     document.querySelectorAll('[data-hotkey]').forEach(b=>b.onclick=()=>action({type:'hotkey',key:b.dataset.hotkey}));

@@ -145,6 +145,14 @@ if ($Cellular) {
     }
     $connectionUrl = "$publicBase/$secretPath/"
     $phoneUrl = 'https://sheep4mil-ui.github.io/bed-desk/'
+    $pairAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    $pairBytes = New-Object byte[] 8
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($pairBytes)
+    $pairCode = -join ($pairBytes | ForEach-Object { $pairAlphabet[$_ % $pairAlphabet.Length] })
+    $hostFragment = '#host=' + $pairCode +
+        '&server=' + [Uri]::EscapeDataString($connectionUrl) +
+        '&pin=' + $pin
+    Start-Process ($phoneUrl + $hostFragment)
 }
 else {
     $localIp = Get-NetIPAddress -AddressFamily IPv4 |
@@ -163,10 +171,12 @@ Write-Host "  On your phone, open:" -ForegroundColor Cyan
 Write-Host "  $phoneUrl" -ForegroundColor Cyan
 if ($Cellular) {
     Write-Host ''
-    Write-Host '  Paste this connection address into the website:' -ForegroundColor Cyan
-    Write-Host "  $connectionUrl" -ForegroundColor Cyan
+    Write-Host '  Enter this code:' -ForegroundColor Cyan
+    Write-Host "  $($pairCode.Substring(0,4)) $($pairCode.Substring(4,4))" -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host '  Keep the Bed Desk setup tab that just opened on this PC.' -ForegroundColor DarkGray
 }
-Write-Host "  PIN:                  $pin" -ForegroundColor Yellow
+else { Write-Host "  PIN:                  $pin" -ForegroundColor Yellow }
 Write-Host ''
 Write-Host '  Keep this window open. Press Ctrl+C here to stop.' -ForegroundColor DarkGray
 if (-not $Cellular) { Write-Host '  Both devices must be on the same Wi-Fi.' -ForegroundColor DarkGray }
