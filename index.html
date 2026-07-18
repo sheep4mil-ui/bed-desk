@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#11110f">
+  <title>Bed Desk</title>
+  <style>
+    :root { color-scheme: dark; --ink:#f4f0e8; --muted:#918d84; --line:#302f2b; --lime:#c9ff55; --panel:#1a1a17; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body { margin:0; min-height:100%; background:#11110f; color:var(--ink); font-family:Inter,system-ui,sans-serif; overscroll-behavior:none; }
+    body { min-height:100dvh; padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom); display:flex; justify-content:center; }
+    main { width:min(100%,520px); display:grid; grid-template-rows:auto 1fr auto; gap:12px; min-height:100dvh; padding:12px 0; }
+    header { display:flex; align-items:center; justify-content:space-between; }
+    .brand { display:flex; gap:10px; align-items:center; font-weight:800; letter-spacing:-.03em; }
+    .dot { width:10px; height:10px; background:var(--lime); border-radius:50%; box-shadow:0 0 16px var(--lime); }
+    button,input,textarea { font:inherit; }
+    button { color:var(--ink); border:1px solid var(--line); background:var(--panel); border-radius:14px; min-height:48px; font-weight:650; touch-action:manipulation; }
+    button:active { transform:scale(.97); background:#292923; }
+    .stop { min-height:36px; padding:0 12px; color:#ff8a80; background:transparent; }
+    .pad { position:relative; min-height:42dvh; border:1px solid var(--line); border-radius:24px; overflow:hidden; touch-action:none;
+      background:radial-gradient(circle at 50% 35%,#25251f 0,#181815 55%,#151512 100%); }
+    .pad::before { content:"MOVE"; position:absolute; inset:0; display:grid; place-items:center; font-size:clamp(2rem,10vw,4rem); font-weight:900; color:#262620; letter-spacing:.08em; pointer-events:none; }
+    .hint { position:absolute; bottom:18px; width:100%; text-align:center; color:var(--muted); font-size:.78rem; pointer-events:none; }
+    .clicks,.keys,.shortcuts { display:grid; gap:8px; }
+    .clicks { grid-template-columns:1fr 1fr; }
+    .keys { grid-template-columns:repeat(5,1fr); }
+    .shortcuts { grid-template-columns:repeat(4,1fr); }
+    .left { background:var(--lime); color:#14150f; border-color:var(--lime); }
+    .typebox { display:grid; grid-template-columns:1fr auto; gap:8px; }
+    textarea { resize:none; height:54px; padding:15px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:14px; outline:none; }
+    textarea:focus { border-color:#777467; }
+    .send { padding:0 18px; }
+    .status { min-height:20px; text-align:center; color:var(--muted); font-size:.78rem; }
+    .login { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:24px; background:#11110f; }
+    .card { width:min(100%,360px); text-align:center; }
+    .card h1 { font-size:2.5rem; margin:0 0 8px; letter-spacing:-.06em; }
+    .card p { color:var(--muted); line-height:1.5; }
+    .pin { width:100%; padding:16px; text-align:center; letter-spacing:.3em; font-size:1.4rem; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:14px; outline:none; }
+    .connect { width:100%; margin-top:10px; background:var(--lime); color:#14150f; border-color:var(--lime); }
+    .hidden { display:none; }
+    @media (max-height:700px) { .pad { min-height:32dvh; } main { gap:8px; } button { min-height:42px; } }
+  </style>
+</head>
+<body>
+  <section class="login" id="login">
+    <div class="card">
+      <div class="dot" style="margin:0 auto 20px"></div>
+      <h1>Bed Desk</h1>
+      <p id="loginHelp">Enter the connection address and PIN shown on your PC.</p>
+      <input class="pin" id="server" type="url" inputmode="url" placeholder="https://…trycloudflare.com/…" style="font-size:.9rem;letter-spacing:0;text-align:left;margin-bottom:10px">
+      <input class="pin" id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+      <button class="connect" id="connect">Connect</button>
+      <p id="loginError"></p>
+    </div>
+  </section>
+
+  <main>
+    <header><div class="brand"><i class="dot"></i> BED DESK</div><button class="stop" id="stop">Stop PC control</button></header>
+    <div class="pad" id="pad"><div class="hint">Tap to click · two fingers to scroll</div></div>
+    <div>
+      <div class="clicks"><button class="left" data-click="left">Left click</button><button data-click="right">Right click</button></div>
+      <div class="typebox" style="margin-top:8px"><textarea id="text" placeholder="Type something…"></textarea><button class="send" id="send">Send</button></div>
+      <div class="keys" style="margin-top:8px">
+        <button data-key="backspace">⌫</button><button data-key="enter">Enter</button><button data-key="tab">Tab</button><button data-key="left">←</button><button data-key="right">→</button>
+      </div>
+      <div class="shortcuts" style="margin-top:8px">
+        <button data-hotkey="copy">Copy</button><button data-hotkey="paste">Paste</button><button data-hotkey="undo">Undo</button><button data-hotkey="save">Save</button>
+      </div>
+      <div class="status" id="status">Connected over local Wi-Fi</div>
+    </div>
+  </main>
+  <script>
+    const hosted = location.hostname.endsWith('github.io');
+    let pin = sessionStorage.getItem('bedDeskPin') || '';
+    let server = hosted ? (sessionStorage.getItem('bedDeskServer') || '') : '';
+    const $ = s => document.querySelector(s);
+    const login = $('#login'), status = $('#status');
+    if (!hosted) {
+      $('#server').classList.add('hidden');
+      $('#loginHelp').textContent = 'Enter the PIN shown on your PC.';
+    } else {
+      $('#server').value = server;
+    }
+    async function action(data, quiet=false) {
+      try {
+        const endpoint = hosted ? `${server}api/action` : 'api/action';
+        const r = await fetch(endpoint, {method:'POST', headers:{'Content-Type':'application/json','X-Remote-Pin':pin}, body:JSON.stringify(data)});
+        if (r.status === 401) { login.classList.remove('hidden'); sessionStorage.removeItem('bedDeskPin'); throw Error('Wrong PIN'); }
+        if (!r.ok && r.status !== 204) throw Error('Connection lost');
+        return true;
+      } catch(e) { if(!quiet) status.textContent=e.message; return false; }
+    }
+    async function connect() {
+      pin = $('#pin').value.trim();
+      if (hosted) {
+        server = $('#server').value.trim();
+        if (!/^https:\/\/.+\/$/i.test(server)) { $('#loginError').textContent='Paste the complete HTTPS address, including the final slash.'; return; }
+      }
+      if (!/^\d{6}$/.test(pin)) { $('#loginError').textContent='Enter all six digits.'; return; }
+      if (await action({type:'move',dx:0,dy:0},true)) {
+        sessionStorage.setItem('bedDeskPin',pin);
+        if (hosted) sessionStorage.setItem('bedDeskServer',server);
+        login.classList.add('hidden');
+      }
+      else $('#loginError').textContent='That PIN did not work.';
+    }
+    $('#connect').onclick=connect; $('#pin').onkeydown=e=>{if(e.key==='Enter')connect()};
+    if (/^\d{6}$/.test(pin) && (!hosted || server)) login.classList.add('hidden');
+    document.querySelectorAll('[data-click]').forEach(b=>b.onclick=()=>action({type:'click',button:b.dataset.click}));
+    document.querySelectorAll('[data-key]').forEach(b=>b.onclick=()=>action({type:'key',key:b.dataset.key}));
+    document.querySelectorAll('[data-hotkey]').forEach(b=>b.onclick=()=>action({type:'hotkey',key:b.dataset.hotkey}));
+    $('#send').onclick=()=>{const t=$('#text'); if(t.value){action({type:'text',text:t.value});t.value='';}};
+    $('#text').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#send').click();}};
+    $('#stop').onclick=async()=>{if(confirm('Stop Bed Desk on the PC?')){await action({type:'stop'});status.textContent='Stopped';}};
+
+    const pad=$('#pad'); let touches=new Map(), moved=0, lastMove=0;
+    pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);touches.set(e.pointerId,{x:e.clientX,y:e.clientY,px:e.clientX,py:e.clientY});moved=0;});
+    pad.addEventListener('pointermove',e=>{
+      const t=touches.get(e.pointerId); if(!t)return;
+      t.x=e.clientX;t.y=e.clientY; moved+=Math.abs(t.x-t.px)+Math.abs(t.y-t.py);
+      const now=performance.now();
+      if(now-lastMove>16){
+        const all=[...touches.values()];
+        if(all.length===1){action({type:'move',dx:Math.round((t.x-t.px)*1.7),dy:Math.round((t.y-t.py)*1.7)},true);}
+        else {action({type:'scroll',amount:Math.round(-(t.y-t.py)*12)},true);}
+        all.forEach(v=>{v.px=v.x;v.py=v.y});lastMove=now;
+      }
+    });
+    function end(e){touches.delete(e.pointerId);if(moved<8&&touches.size===0)action({type:'click',button:'left'},true);}
+    pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);
+    pad.addEventListener('contextmenu',e=>e.preventDefault());
+  </script>
+</body>
+</html>
