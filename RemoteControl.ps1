@@ -145,6 +145,7 @@ $listener.Prefixes.Add("http://${listenHost}:$Port/")
 $listener.Start()
 
 $tunnelProcess = $null
+$streamProcess = $null
 $tunnelLog = $null
 if ($Cellular) {
     $toolDir = Join-Path $root 'tools'
@@ -189,7 +190,17 @@ if ($Cellular) {
     $hostFragment = '#host=' + $pairCode +
         '&server=' + [Uri]::EscapeDataString($connectionUrl) +
         '&pin=' + $pin
-    Start-Process ($phoneUrl + $hostFragment)
+    $electron = Join-Path $root 'node_modules\.bin\electron.cmd'
+    if (-not (Test-Path $electron)) {
+        Write-Host 'Installing the automatic screen streamer (first run only)...' -ForegroundColor Cyan
+        Push-Location $root
+        try { & npm.cmd install --no-audit --no-fund }
+        finally { Pop-Location }
+        if (-not (Test-Path $electron)) { throw 'The automatic screen streamer could not be installed.' }
+    }
+    $env:BED_DESK_URL = $phoneUrl + $hostFragment
+    try { $streamProcess = Start-Process -FilePath $electron -WorkingDirectory $root -PassThru }
+    finally { Remove-Item Env:\BED_DESK_URL -ErrorAction SilentlyContinue }
 }
 else {
     $localIp = Get-NetIPAddress -AddressFamily IPv4 |
@@ -211,7 +222,7 @@ if ($Cellular) {
     Write-Host '  Enter this code:' -ForegroundColor Cyan
     Write-Host "  $($pairCode.Substring(0,4)) $($pairCode.Substring(4,4))" -ForegroundColor Yellow
     Write-Host ''
-    Write-Host '  Keep the Bed Desk setup tab that just opened on this PC.' -ForegroundColor DarkGray
+    Write-Host '  Keep the Bed Desk Streamer window open on this PC.' -ForegroundColor DarkGray
 }
 else { Write-Host "  PIN:                  $pin" -ForegroundColor Yellow }
 Write-Host ''
@@ -351,6 +362,7 @@ try {
 finally {
     if ($listener.IsListening) { $listener.Stop() }
     $listener.Close()
+    if ($streamProcess -and -not $streamProcess.HasExited) { $streamProcess.Kill() }
     if ($tunnelProcess -and -not $tunnelProcess.HasExited) { $tunnelProcess.Kill() }
     if ($tunnelLog) {
         Remove-Item -LiteralPath $tunnelLog -Force -ErrorAction SilentlyContinue

@@ -21,7 +21,7 @@
     .header-actions { display:flex; gap:7px; }
     .screen-toggle { min-height:36px; padding:0 12px; color:var(--lime); background:transparent; }
     .screen { position:relative; min-height:150px; max-height:38dvh; aspect-ratio:16/9; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#050505; }
-    .screen img { width:100%; height:100%; display:block; object-fit:contain; pointer-events:none; }
+    .screen img,.screen video { width:100%; height:100%; display:block; object-fit:contain; pointer-events:none; }
     .screen-state { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); font-size:.82rem; pointer-events:none; }
     .screen img[src] + .screen-state { display:none; }
     .screen-tools { position:absolute; top:10px; right:10px; display:flex; gap:7px; z-index:2; }
@@ -70,7 +70,7 @@
 
   <main>
     <header><div class="brand"><i class="dot"></i> BED DESK</div><div class="header-actions"><button class="screen-toggle hidden" id="soundButton">Sound</button><button class="screen-toggle" id="screenToggle">Screen on</button><button class="stop" id="stop">Stop</button></div></header>
-    <div class="screen" id="screen"><img id="screenView" alt="Live view of the PC screen"><div class="screen-state">Loading PC screen…</div><i class="remote-cursor" id="remoteCursor"></i><div class="screen-tools"><button id="keyboardButton">Keyboard</button><button id="fullscreenButton">Full screen</button></div><input class="keyboard-capture" id="keyboardCapture" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type on your PC…"></div>
+    <div class="screen" id="screen"><video class="hidden" id="screenVideo" autoplay muted playsinline></video><img id="screenView" alt="Live view of the PC screen"><div class="screen-state">Loading PC screen…</div><i class="remote-cursor" id="remoteCursor"></i><div class="screen-tools"><button id="keyboardButton">Keyboard</button><button id="fullscreenButton">Full screen</button></div><input class="keyboard-capture" id="keyboardCapture" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type on your PC…"></div>
     <div class="pad" id="pad"><div class="hint">Tap to click · two fingers to scroll</div></div>
     <div>
       <div class="clicks"><button class="left" data-click="left">Left click</button><button data-click="right">Right click</button></div>
@@ -114,17 +114,18 @@
       } catch(e) { if(!quiet) status.textContent=e.message; return false; }
     }
     function remoteUrl(path) { return hosted ? `${server}${path}` : path; }
-    let screenRunning=false, screenTimer=null, screenObjectUrl='',cursorX=.5,cursorY=.5,pcWidth=1920,pcHeight=1080;
+    let screenRunning=false,liveVideo=false,screenTimer=null,screenObjectUrl='',cursorX=.5,cursorY=.5,pcWidth=1920,pcHeight=1080;
     function renderCursor(){
-      const image=$('#screenView'),box=$('#screen'),marker=$('#remoteCursor'),rect=box.getBoundingClientRect();
-      const imageRatio=(image.naturalWidth&&image.naturalHeight)?image.naturalWidth/image.naturalHeight:16/9;
+      const image=liveVideo?$('#screenVideo'):$('#screenView'),box=$('#screen'),marker=$('#remoteCursor'),rect=box.getBoundingClientRect();
+      const mediaWidth=liveVideo?image.videoWidth:image.naturalWidth,mediaHeight=liveVideo?image.videoHeight:image.naturalHeight;
+      const imageRatio=(mediaWidth&&mediaHeight)?mediaWidth/mediaHeight:16/9;
       const boxRatio=rect.width/rect.height;let width,height,left,top;
       if(boxRatio>imageRatio){height=rect.height;width=height*imageRatio;left=(rect.width-width)/2;top=0;}
       else{width=rect.width;height=width/imageRatio;left=0;top=(rect.height-height)/2;}
       marker.style.left=`${left+(cursorX/pcWidth)*width}px`;marker.style.top=`${top+(cursorY/pcHeight)*height}px`;
     }
     async function refreshScreen() {
-      if(!screenRunning)return;
+      if(!screenRunning||liveVideo)return;
       try {
         const response=await fetch(remoteUrl('screen.jpg'),{headers:{'X-Remote-Pin':pin},cache:'no-store'});
         if(!response.ok)throw new Error('Screen unavailable');
@@ -137,7 +138,7 @@
       } catch(error) { status.textContent=error.message; }
       if(screenRunning)screenTimer=setTimeout(refreshScreen,250);
     }
-    function startScreen(){if(screenRunning)return;screenRunning=true;$('#screen').classList.remove('hidden');$('#screenToggle').textContent='Screen on';refreshScreen();}
+    function startScreen(){if(screenRunning)return;screenRunning=true;$('#screen').classList.remove('hidden');$('#screenToggle').textContent='Screen on';if(!liveVideo)refreshScreen();}
     function stopScreen(){screenRunning=false;clearTimeout(screenTimer);$('#screen').classList.add('hidden');$('#screenToggle').textContent='Screen off';if(screenObjectUrl){URL.revokeObjectURL(screenObjectUrl);screenObjectUrl='';}$('#screenView').removeAttribute('src');}
     async function focusedControlAcceptsText(){
       try{const response=await fetch(remoteUrl('focus'),{headers:{'X-Remote-Pin':pin},cache:'no-store'});return response.ok&&(await response.json()).text===true;}catch{return false;}
@@ -183,7 +184,14 @@
         const timer = setTimeout(()=>{ peer.destroy(); reject(new Error('PC not found. Check the code and keep its setup tab open.')); },12000);
         peer.on('call',call=>{
           if(pcAudioCall)pcAudioCall.close();pcAudioCall=call;call.answer();
-          call.on('stream',stream=>{const audio=$('#pcAudio');audio.srcObject=new MediaStream(stream.getAudioTracks());audio.muted=false;$('#soundButton').classList.remove('hidden');audio.play().catch(()=>{$('#soundButton').textContent='Play sound';});});
+          call.on('stream',stream=>{
+            const audio=$('#pcAudio'),video=$('#screenVideo'),videoTracks=stream.getVideoTracks(),audioTracks=stream.getAudioTracks();
+            if(audioTracks.length){audio.srcObject=new MediaStream(audioTracks);audio.muted=false;$('#soundButton').classList.remove('hidden');audio.play().catch(()=>{$('#soundButton').textContent='Play sound';});}
+            if(videoTracks.length){
+              liveVideo=true;screenRunning=true;clearTimeout(screenTimer);video.srcObject=new MediaStream(videoTracks);video.classList.remove('hidden');$('#screenView').classList.add('hidden');$('#screen').classList.remove('hidden');video.play().catch(()=>{});status.textContent='Live video connected';
+              videoTracks[0].addEventListener('ended',()=>{liveVideo=false;video.srcObject=null;video.classList.add('hidden');$('#screenView').classList.remove('hidden');if(screenRunning)refreshScreen();});
+            }
+          });
         });
         peer.on('open',()=>{
           const connection=peer.connect(`bed-${code}`,{reliable:true});
@@ -203,22 +211,21 @@
       const hostServer = fragment.get('server');
       const hostPin = fragment.get('pin');
       history.replaceState(null,'',location.pathname);
-      $('.card').innerHTML='<div class="dot" style="margin:0 auto 20px"></div><h1>PC ready</h1><p>On your phone, open this same website and enter:</p><div class="pin" style="font-weight:800">'+code.toUpperCase().replace(/(.{4})/,'$1 ')+'</div><button class="connect" id="enablePcSound">Enable PC sound</button><p id="hostStatus">Registering this PC…</p>';
+      $('.card').innerHTML='<div class="dot" style="margin:0 auto 20px"></div><h1>PC ready</h1><p>On your phone, open this same website and enter:</p><div class="pin" style="font-weight:800">'+code.toUpperCase().replace(/(.{4})/,'$1 ')+'</div><button class="connect" id="enablePcSound">Enable smooth video + sound</button><p id="hostStatus">Registering this PC…</p>';
       const hostPeer = new Peer(`bed-${code}`);
-      let sharedAudioStream=null,hostCapture=null,lastPhonePeer='';
-      function broadcastAudio(peerId){if(sharedAudioStream&&peerId)hostPeer.call(peerId,sharedAudioStream);}
-      hostPeer.on('open',()=>$('#hostStatus').textContent='Ready — keep this tab open');
-      hostPeer.on('connection',connection=>connection.on('open',()=>{lastPhonePeer=connection.peer;connection.send({server:hostServer,pin:hostPin});broadcastAudio(lastPhonePeer);}));
-      hostPeer.on('error',()=>$('#hostStatus').textContent='Could not register. Restart cellular mode.');
-      $('#enablePcSound').onclick=async()=>{
-        const button=$('#enablePcSound');button.disabled=true;$('#hostStatus').textContent='Choose a screen and turn on Share system audio…';
+      let sharedDisplayStream=null,hostCapture=null,lastPhonePeer='';
+      function broadcastDisplay(peerId){if(sharedDisplayStream&&peerId)hostPeer.call(peerId,sharedDisplayStream);}
+      async function startCapture(){
+        const button=$('#enablePcSound');button.disabled=true;$('#hostStatus').textContent='Starting automatic screen and sound…';
         try{
-          hostCapture=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
-          const audioTracks=hostCapture.getAudioTracks();
-          if(!audioTracks.length)throw new Error('No sound was shared. Try again and enable Share system audio.');
-          sharedAudioStream=new MediaStream(audioTracks);button.textContent='PC sound enabled';$('#hostStatus').textContent='Ready — sound will play on the phone';broadcastAudio(lastPhonePeer);
-        }catch(error){button.disabled=false;$('#hostStatus').textContent=error.message||'PC sound sharing was cancelled.';}
-      };
+          hostCapture=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:30}},audio:true});
+          sharedDisplayStream=hostCapture;button.textContent='Smooth video enabled';$('#hostStatus').textContent='Ready — live video and sound will play on the phone';broadcastDisplay(lastPhonePeer);
+        }catch(error){button.disabled=false;$('#hostStatus').textContent=error.message||'Automatic streaming could not start.';}
+      }
+      hostPeer.on('open',()=>{ $('#hostStatus').textContent='Ready — keep this window open'; });
+      hostPeer.on('connection',connection=>connection.on('open',()=>{lastPhonePeer=connection.peer;connection.send({server:hostServer,pin:hostPin});broadcastDisplay(lastPhonePeer);}));
+      hostPeer.on('error',()=>$('#hostStatus').textContent='Could not register. Restart cellular mode.');
+      $('#enablePcSound').onclick=startCapture;
     }
     document.querySelectorAll('[data-click]').forEach(b=>b.onclick=()=>action({type:'click',button:b.dataset.click}));
     document.querySelectorAll('[data-key]').forEach(b=>b.onclick=()=>action({type:'key',key:b.dataset.key}));
