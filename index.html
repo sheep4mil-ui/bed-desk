@@ -30,7 +30,7 @@
     .screen.fullscreen { position:fixed; inset:0; z-index:20; width:100vw; height:100dvh; max-height:none; aspect-ratio:auto; border:0; border-radius:0; touch-action:none; }
     .screen.fullscreen .keyboard-capture { display:block; }
     .screen.fullscreen .screen-state { font-size:1rem; }
-    .remote-cursor { position:absolute; left:0; top:0; z-index:4; width:28px; height:34px; background:var(--lime); clip-path:polygon(0 0,8% 82%,34% 61%,58% 100%,78% 86%,54% 51%,100% 47%); filter:drop-shadow(0 0 2px #000) drop-shadow(0 0 2px #000); pointer-events:none; transform:translate(-2px,-2px); }
+    .remote-cursor { position:absolute; left:0; top:0; z-index:4; width:14px; height:18px; background:var(--lime); clip-path:polygon(0 0,8% 82%,34% 61%,58% 100%,78% 86%,54% 51%,100% 47%); filter:drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); pointer-events:none; transform:translate(-1px,-1px); }
     .pad { position:relative; min-height:42dvh; border:1px solid var(--line); border-radius:24px; overflow:hidden; touch-action:none;
       background:radial-gradient(circle at 50% 35%,#25251f 0,#181815 55%,#151512 100%); }
     .pad::before { content:"MOVE"; position:absolute; inset:0; display:grid; place-items:center; font-size:clamp(2rem,10vw,4rem); font-weight:900; color:#262620; letter-spacing:.08em; pointer-events:none; }
