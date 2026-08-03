@@ -135,7 +135,7 @@
         renderCursor();
         if(oldUrl)URL.revokeObjectURL(oldUrl);
       } catch(error) { status.textContent=error.message; }
-      if(screenRunning)screenTimer=setTimeout(refreshScreen,700);
+      if(screenRunning)screenTimer=setTimeout(refreshScreen,250);
     }
     function startScreen(){if(screenRunning)return;screenRunning=true;$('#screen').classList.remove('hidden');$('#screenToggle').textContent='Screen on';refreshScreen();}
     function stopScreen(){screenRunning=false;clearTimeout(screenTimer);$('#screen').classList.add('hidden');$('#screenToggle').textContent='Screen off';if(screenObjectUrl){URL.revokeObjectURL(screenObjectUrl);screenObjectUrl='';}$('#screenView').removeAttribute('src');}
