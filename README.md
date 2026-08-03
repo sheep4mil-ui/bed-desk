@@ -6,6 +6,10 @@ The controller includes a live view of the PC's primary screen. Tap **Screen
 on** in the phone header to pause the screen feed and reduce data use; tap it
 again to resume.
 
+Tap **Full screen** to turn the live PC image itself into the trackpad. Tapping
+a text field asks iOS to open its keyboard automatically; the **Keyboard**
+button is available when Safari requires an extra user tap.
+
 ## Start
 
 1. Put the PC and phone on the same Wi-Fi.

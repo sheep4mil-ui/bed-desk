@@ -21,9 +21,15 @@
     .header-actions { display:flex; gap:7px; }
     .screen-toggle { min-height:36px; padding:0 12px; color:var(--lime); background:transparent; }
     .screen { position:relative; min-height:150px; max-height:38dvh; aspect-ratio:16/9; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#050505; }
-    .screen img { width:100%; height:100%; display:block; object-fit:contain; }
+    .screen img { width:100%; height:100%; display:block; object-fit:contain; pointer-events:none; }
     .screen-state { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); font-size:.82rem; pointer-events:none; }
     .screen img[src] + .screen-state { display:none; }
+    .screen-tools { position:absolute; top:10px; right:10px; display:flex; gap:7px; z-index:2; }
+    .screen-tools button { min-height:38px; padding:0 12px; background:#11110fcc; backdrop-filter:blur(10px); }
+    .keyboard-capture { display:none; position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:3; height:48px; padding:0 14px; border:1px solid var(--lime); border-radius:12px; background:#171713ee; color:var(--ink); font-size:16px; }
+    .screen.fullscreen { position:fixed; inset:0; z-index:20; width:100vw; height:100dvh; max-height:none; aspect-ratio:auto; border:0; border-radius:0; touch-action:none; }
+    .screen.fullscreen .keyboard-capture { display:block; }
+    .screen.fullscreen .screen-state { font-size:1rem; }
     .pad { position:relative; min-height:42dvh; border:1px solid var(--line); border-radius:24px; overflow:hidden; touch-action:none;
       background:radial-gradient(circle at 50% 35%,#25251f 0,#181815 55%,#151512 100%); }
     .pad::before { content:"MOVE"; position:absolute; inset:0; display:grid; place-items:center; font-size:clamp(2rem,10vw,4rem); font-weight:900; color:#262620; letter-spacing:.08em; pointer-events:none; }
@@ -63,7 +69,7 @@
 
   <main>
     <header><div class="brand"><i class="dot"></i> BED DESK</div><div class="header-actions"><button class="screen-toggle" id="screenToggle">Screen on</button><button class="stop" id="stop">Stop</button></div></header>
-    <div class="screen" id="screen"><img id="screenView" alt="Live view of the PC screen"><div class="screen-state">Loading PC screen…</div></div>
+    <div class="screen" id="screen"><img id="screenView" alt="Live view of the PC screen"><div class="screen-state">Loading PC screen…</div><div class="screen-tools"><button id="keyboardButton">Keyboard</button><button id="fullscreenButton">Full screen</button></div><input class="keyboard-capture" id="keyboardCapture" type="text" inputmode="text" autocomplete="off" autocapitalize="sentences" placeholder="Type on your PC…"></div>
     <div class="pad" id="pad"><div class="hint">Tap to click · two fingers to scroll</div></div>
     <div>
       <div class="clicks"><button class="left" data-click="left">Left click</button><button data-click="right">Right click</button></div>
@@ -119,6 +125,15 @@
     }
     function startScreen(){if(screenRunning)return;screenRunning=true;$('#screen').classList.remove('hidden');$('#screenToggle').textContent='Screen on';refreshScreen();}
     function stopScreen(){screenRunning=false;clearTimeout(screenTimer);$('#screen').classList.add('hidden');$('#screenToggle').textContent='Screen off';if(screenObjectUrl){URL.revokeObjectURL(screenObjectUrl);screenObjectUrl='';}$('#screenView').removeAttribute('src');}
+    async function focusedControlAcceptsText(){
+      try{const response=await fetch(remoteUrl('focus'),{headers:{'X-Remote-Pin':pin},cache:'no-store'});return response.ok&&(await response.json()).text===true;}catch{return false;}
+    }
+    function showPhoneKeyboard(){const input=$('#keyboardCapture');input.focus({preventScroll:true});input.click();}
+    function toggleFullscreen(){
+      const active=$('#screen').classList.toggle('fullscreen');
+      $('#fullscreenButton').textContent=active?'Exit':'Full screen';
+      document.body.style.overflow=active?'hidden':'';
+    }
     async function connect() {
       if (hosted) {
         const code = $('#pin').value.replace(/[^a-z0-9]/gi,'').toLowerCase();
@@ -182,10 +197,19 @@
     $('#text').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#send').click();}};
     $('#stop').onclick=async()=>{if(confirm('Stop Bed Desk on the PC?')){await action({type:'stop'});status.textContent='Stopped';}};
     $('#screenToggle').onclick=()=>screenRunning?stopScreen():startScreen();
+    $('#fullscreenButton').onclick=e=>{e.stopPropagation();toggleFullscreen();};
+    $('#keyboardButton').onclick=e=>{e.stopPropagation();showPhoneKeyboard();};
+    $('#keyboardCapture').addEventListener('beforeinput',e=>{
+      if(e.inputType==='deleteContentBackward'){e.preventDefault();action({type:'key',key:'backspace'},true);}
+      if(e.inputType==='insertLineBreak'){e.preventDefault();action({type:'key',key:'enter'},true);}
+    });
+    $('#keyboardCapture').addEventListener('input',e=>{if(e.target.value){action({type:'text',text:e.target.value},true);e.target.value='';}});
+    $('#keyboardCapture').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();action({type:'key',key:'enter'},true);}});
 
-    const pad=$('#pad'); let touches=new Map(), moved=0, lastMove=0;
-    pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);touches.set(e.pointerId,{x:e.clientX,y:e.clientY,px:e.clientX,py:e.clientY});moved=0;});
-    pad.addEventListener('pointermove',e=>{
+    const pad=$('#pad'),screenSurface=$('#screen'); let touches=new Map(), moved=0, lastMove=0;
+    function bindPointerSurface(surface){
+    surface.addEventListener('pointerdown',e=>{if(surface===screenSurface&&!screenSurface.classList.contains('fullscreen'))return;if(e.target.closest('button,input'))return;surface.setPointerCapture(e.pointerId);touches.set(e.pointerId,{x:e.clientX,y:e.clientY,px:e.clientX,py:e.clientY});moved=0;});
+    surface.addEventListener('pointermove',e=>{
       const t=touches.get(e.pointerId); if(!t)return;
       t.x=e.clientX;t.y=e.clientY; moved+=Math.abs(t.x-t.px)+Math.abs(t.y-t.py);
       const now=performance.now();
@@ -196,9 +220,11 @@
         all.forEach(v=>{v.px=v.x;v.py=v.y});lastMove=now;
       }
     });
-    function end(e){touches.delete(e.pointerId);if(moved<8&&touches.size===0)action({type:'click',button:'left'},true);}
-    pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);
-    pad.addEventListener('contextmenu',e=>e.preventDefault());
+    async function end(e){const wasTracked=touches.has(e.pointerId);touches.delete(e.pointerId);if(wasTracked&&moved<8&&touches.size===0){action({type:'click',button:'left'},true);if(surface===screenSurface){setTimeout(async()=>{if(await focusedControlAcceptsText())showPhoneKeyboard();},180);}}}
+    surface.addEventListener('pointerup',end);surface.addEventListener('pointercancel',end);
+    surface.addEventListener('contextmenu',e=>e.preventDefault());
+    }
+    bindPointerSurface(pad);bindPointerSurface(screenSurface);
   </script>
 </body>
 </html>

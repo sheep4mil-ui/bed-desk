@@ -7,6 +7,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName UIAutomationClient
 
 function Get-ScreenJpeg {
     $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
@@ -160,6 +162,7 @@ $secretPath = if ($Cellular) { ([Guid]::NewGuid().ToString('N') + [Guid]::NewGui
 $pagePath = if ($Cellular) { "/$secretPath/" } else { '/' }
 $apiPath = if ($Cellular) { "/$secretPath/api/action" } else { '/api/action' }
 $screenPath = if ($Cellular) { "/$secretPath/screen.jpg" } else { '/screen.jpg' }
+$focusPath = if ($Cellular) { "/$secretPath/focus" } else { '/focus' }
 $listenHost = if ($Cellular) { '127.0.0.1' } else { '+' }
 $listener.Prefixes.Add("http://${listenHost}:$Port/")
 $listener.Start()
@@ -259,7 +262,7 @@ try {
         }
 
         try {
-            if ($request.HttpMethod -eq 'OPTIONS' -and ($request.Url.AbsolutePath -eq $apiPath -or $request.Url.AbsolutePath -eq $screenPath)) {
+            if ($request.HttpMethod -eq 'OPTIONS' -and ($request.Url.AbsolutePath -eq $apiPath -or $request.Url.AbsolutePath -eq $screenPath -or $request.Url.AbsolutePath -eq $focusPath)) {
                 $response.Headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
                 $response.Headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Remote-Pin'
                 $response.Headers['Access-Control-Max-Age'] = '600'
@@ -277,7 +280,7 @@ try {
                 continue
             }
 
-            if ($request.Url.AbsolutePath -ne $apiPath -and $request.Url.AbsolutePath -ne $screenPath) {
+            if ($request.Url.AbsolutePath -ne $apiPath -and $request.Url.AbsolutePath -ne $screenPath -and $request.Url.AbsolutePath -ne $focusPath) {
                 $response.StatusCode = 404
                 continue
             }
@@ -294,6 +297,22 @@ try {
                 $response.Headers['X-Content-Type-Options'] = 'nosniff'
                 $response.ContentLength64 = $screenBytes.Length
                 $response.OutputStream.Write($screenBytes, 0, $screenBytes.Length)
+                continue
+            }
+
+            if ($request.HttpMethod -eq 'GET' -and $request.Url.AbsolutePath -eq $focusPath) {
+                $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+                $isText = $false
+                if ($focused) {
+                    $controlType = $focused.Current.ControlType
+                    $isText = $controlType -eq [System.Windows.Automation.ControlType]::Edit -or
+                        $controlType -eq [System.Windows.Automation.ControlType]::Document -or
+                        $controlType -eq [System.Windows.Automation.ControlType]::ComboBox
+                }
+                $focusBytes = [Text.Encoding]::UTF8.GetBytes($(if ($isText) { '{"text":true}' } else { '{"text":false}' }))
+                $response.ContentType = 'application/json; charset=utf-8'
+                $response.ContentLength64 = $focusBytes.Length
+                $response.OutputStream.Write($focusBytes, 0, $focusBytes.Length)
                 continue
             }
 
