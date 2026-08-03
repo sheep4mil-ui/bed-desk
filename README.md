@@ -2,6 +2,10 @@
 
 Use your phone as a wireless trackpad and keyboard for this Windows PC.
 
+The controller includes a live view of the PC's primary screen. Tap **Screen
+on** in the phone header to pause the screen feed and reduce data use; tap it
+again to resume.
+
 ## Start
 
 1. Put the PC and phone on the same Wi-Fi.

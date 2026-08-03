@@ -5,6 +5,39 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+function Get-ScreenJpeg {
+    $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $source = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
+    $sourceGraphics = [System.Drawing.Graphics]::FromImage($source)
+    try {
+        $sourceGraphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+        $targetWidth = [Math]::Min(1280, $bounds.Width)
+        $targetHeight = [Math]::Max(1, [int][Math]::Round($bounds.Height * ($targetWidth / [double]$bounds.Width)))
+        $target = New-Object System.Drawing.Bitmap($targetWidth, $targetHeight)
+        $targetGraphics = [System.Drawing.Graphics]::FromImage($target)
+        try {
+            $targetGraphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBilinear
+            $targetGraphics.DrawImage($source, 0, 0, $targetWidth, $targetHeight)
+            $stream = New-Object System.IO.MemoryStream
+            try {
+                $target.Save($stream, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+                return $stream.ToArray()
+            }
+            finally { $stream.Dispose() }
+        }
+        finally {
+            $targetGraphics.Dispose()
+            $target.Dispose()
+        }
+    }
+    finally {
+        $sourceGraphics.Dispose()
+        $source.Dispose()
+    }
+}
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -103,6 +136,7 @@ $listener = New-Object System.Net.HttpListener
 $secretPath = if ($Cellular) { ([Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')) } else { '' }
 $pagePath = if ($Cellular) { "/$secretPath/" } else { '/' }
 $apiPath = if ($Cellular) { "/$secretPath/api/action" } else { '/api/action' }
+$screenPath = if ($Cellular) { "/$secretPath/screen.jpg" } else { '/screen.jpg' }
 $listenHost = if ($Cellular) { '127.0.0.1' } else { '+' }
 $listener.Prefixes.Add("http://${listenHost}:$Port/")
 $listener.Start()
@@ -202,8 +236,8 @@ try {
         }
 
         try {
-            if ($request.HttpMethod -eq 'OPTIONS' -and $request.Url.AbsolutePath -eq $apiPath) {
-                $response.Headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            if ($request.HttpMethod -eq 'OPTIONS' -and ($request.Url.AbsolutePath -eq $apiPath -or $request.Url.AbsolutePath -eq $screenPath)) {
+                $response.Headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
                 $response.Headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Remote-Pin'
                 $response.Headers['Access-Control-Max-Age'] = '600'
                 $response.StatusCode = 204
@@ -220,7 +254,7 @@ try {
                 continue
             }
 
-            if ($request.HttpMethod -ne 'POST' -or $request.Url.AbsolutePath -ne $apiPath) {
+            if ($request.Url.AbsolutePath -ne $apiPath -and $request.Url.AbsolutePath -ne $screenPath) {
                 $response.StatusCode = 404
                 continue
             }
@@ -228,6 +262,20 @@ try {
             if ($request.Headers['X-Remote-Pin'] -ne [string]$pin) {
                 Start-Sleep -Milliseconds 250
                 $response.StatusCode = 401
+                continue
+            }
+
+            if ($request.HttpMethod -eq 'GET' -and $request.Url.AbsolutePath -eq $screenPath) {
+                $screenBytes = Get-ScreenJpeg
+                $response.ContentType = 'image/jpeg'
+                $response.Headers['X-Content-Type-Options'] = 'nosniff'
+                $response.ContentLength64 = $screenBytes.Length
+                $response.OutputStream.Write($screenBytes, 0, $screenBytes.Length)
+                continue
+            }
+
+            if ($request.HttpMethod -ne 'POST' -or $request.Url.AbsolutePath -ne $apiPath) {
+                $response.StatusCode = 405
                 continue
             }
 
