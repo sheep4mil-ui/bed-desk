@@ -235,7 +235,6 @@ try {
         $response.Headers['Cache-Control'] = 'no-store'
         if ($request.Headers['Origin'] -eq 'https://sheep4mil-ui.github.io') {
             $response.Headers['Access-Control-Allow-Origin'] = 'https://sheep4mil-ui.github.io'
-            $response.Headers['Access-Control-Expose-Headers'] = 'X-Cursor-X, X-Cursor-Y, X-Screen-Width, X-Screen-Height'
             $response.Headers['Vary'] = 'Origin'
         }
 
@@ -271,12 +270,6 @@ try {
 
             if ($request.HttpMethod -eq 'GET' -and $request.Url.AbsolutePath -eq $screenPath) {
                 $screenBytes = Get-ScreenJpeg
-                $screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-                $cursorPosition = [System.Windows.Forms.Cursor]::Position
-                $response.Headers['X-Cursor-X'] = [string]($cursorPosition.X - $screenBounds.X)
-                $response.Headers['X-Cursor-Y'] = [string]($cursorPosition.Y - $screenBounds.Y)
-                $response.Headers['X-Screen-Width'] = [string]$screenBounds.Width
-                $response.Headers['X-Screen-Height'] = [string]$screenBounds.Height
                 $response.ContentType = 'image/jpeg'
                 $response.Headers['X-Content-Type-Options'] = 'nosniff'
                 $response.ContentLength64 = $screenBytes.Length

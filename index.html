@@ -26,11 +26,10 @@
     .screen img[src] + .screen-state { display:none; }
     .screen-tools { position:absolute; top:10px; right:10px; display:flex; gap:7px; z-index:2; }
     .screen-tools button { min-height:38px; padding:0 12px; background:#11110fcc; backdrop-filter:blur(10px); }
-    .keyboard-capture { display:none; position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:3; height:48px; padding:0 14px; border:1px solid var(--lime); border-radius:12px; background:#171713ee; color:var(--ink); font-size:16px; }
+    .keyboard-capture { display:none; position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:3; height:48px; padding:0 14px; border:1px solid var(--lime); border-radius:12px; background:transparent; color:var(--ink); font-size:16px; text-shadow:0 1px 3px #000; }
     .screen.fullscreen { position:fixed; inset:0; z-index:20; width:100vw; height:100dvh; max-height:none; aspect-ratio:auto; border:0; border-radius:0; touch-action:none; }
     .screen.fullscreen .keyboard-capture { display:block; }
     .screen.fullscreen .screen-state { font-size:1rem; }
-    .remote-cursor { position:absolute; left:0; top:0; z-index:4; width:7px; height:9px; background:var(--lime); clip-path:polygon(0 0,8% 82%,34% 61%,58% 100%,78% 86%,54% 51%,100% 47%); filter:drop-shadow(0 0 1px #000); pointer-events:none; transform:translate(-1px,-1px); }
     .pad { position:relative; min-height:42dvh; border:1px solid var(--line); border-radius:24px; overflow:hidden; touch-action:none;
       background:radial-gradient(circle at 50% 35%,#25251f 0,#181815 55%,#151512 100%); }
     .pad::before { content:"MOVE"; position:absolute; inset:0; display:grid; place-items:center; font-size:clamp(2rem,10vw,4rem); font-weight:900; color:#262620; letter-spacing:.08em; pointer-events:none; }
@@ -70,7 +69,7 @@
 
   <main>
     <header><div class="brand"><i class="dot"></i> BED DESK</div><div class="header-actions"><button class="screen-toggle hidden" id="soundButton">Sound</button><button class="screen-toggle" id="screenToggle">Screen on</button><button class="stop" id="stop">Stop</button></div></header>
-    <div class="screen" id="screen"><video class="hidden" id="screenVideo" autoplay muted playsinline></video><img id="screenView" alt="Live view of the PC screen"><div class="screen-state">Loading PC screen…</div><i class="remote-cursor" id="remoteCursor"></i><div class="screen-tools"><button id="keyboardButton">Keyboard</button><button id="fullscreenButton">Full screen</button></div><input class="keyboard-capture" id="keyboardCapture" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type on your PC…"></div>
+    <div class="screen" id="screen"><video class="hidden" id="screenVideo" autoplay muted playsinline></video><img id="screenView" alt="Live view of the PC screen"><div class="screen-state">Loading PC screen…</div><div class="screen-tools"><button id="keyboardButton">Keyboard</button><button id="fullscreenButton">Full screen</button></div><input class="keyboard-capture" id="keyboardCapture" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Type on your PC…"></div>
     <div class="pad" id="pad"><div class="hint">Tap to click · two fingers to scroll</div></div>
     <div>
       <div class="clicks"><button class="left" data-click="left">Left click</button><button data-click="right">Right click</button></div>
@@ -114,26 +113,14 @@
       } catch(e) { if(!quiet) status.textContent=e.message; return false; }
     }
     function remoteUrl(path) { return hosted ? `${server}${path}` : path; }
-    let screenRunning=false,liveVideo=false,screenTimer=null,screenObjectUrl='',cursorX=.5,cursorY=.5,pcWidth=1920,pcHeight=1080;
-    function renderCursor(){
-      const image=liveVideo?$('#screenVideo'):$('#screenView'),box=$('#screen'),marker=$('#remoteCursor'),rect=box.getBoundingClientRect();
-      const mediaWidth=liveVideo?image.videoWidth:image.naturalWidth,mediaHeight=liveVideo?image.videoHeight:image.naturalHeight;
-      const imageRatio=(mediaWidth&&mediaHeight)?mediaWidth/mediaHeight:16/9;
-      const boxRatio=rect.width/rect.height;let width,height,left,top;
-      if(boxRatio>imageRatio){height=rect.height;width=height*imageRatio;left=(rect.width-width)/2;top=0;}
-      else{width=rect.width;height=width/imageRatio;left=0;top=(rect.height-height)/2;}
-      marker.style.left=`${left+(cursorX/pcWidth)*width}px`;marker.style.top=`${top+(cursorY/pcHeight)*height}px`;
-    }
+    let screenRunning=false,liveVideo=false,screenTimer=null,screenObjectUrl='';
     async function refreshScreen() {
       if(!screenRunning||liveVideo)return;
       try {
         const response=await fetch(remoteUrl('screen.jpg'),{headers:{'X-Remote-Pin':pin},cache:'no-store'});
         if(!response.ok)throw new Error('Screen unavailable');
-        cursorX=Number(response.headers.get('X-Cursor-X'))||cursorX;cursorY=Number(response.headers.get('X-Cursor-Y'))||cursorY;
-        pcWidth=Number(response.headers.get('X-Screen-Width'))||pcWidth;pcHeight=Number(response.headers.get('X-Screen-Height'))||pcHeight;
         const nextUrl=URL.createObjectURL(await response.blob());
         const oldUrl=screenObjectUrl; screenObjectUrl=nextUrl; $('#screenView').src=nextUrl;
-        renderCursor();
         if(oldUrl)URL.revokeObjectURL(oldUrl);
       } catch(error) { status.textContent=error.message; }
       if(screenRunning)screenTimer=setTimeout(refreshScreen,250);
@@ -248,7 +235,6 @@
     let queuedX=0,queuedY=0,queuedScroll=0,motionSending=false;
     function queueMotion(dx,dy,scroll=0){
       queuedX+=dx;queuedY+=dy;queuedScroll+=scroll;
-      if(dx||dy){cursorX=Math.max(0,Math.min(pcWidth,cursorX+dx));cursorY=Math.max(0,Math.min(pcHeight,cursorY+dy));renderCursor();}
       flushMotion();
     }
     async function flushMotion(){
