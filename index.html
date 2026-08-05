@@ -216,7 +216,7 @@
       let sharedDisplayStream=null,hostCapture=null,lastPhonePeer='';
       function broadcastDisplay(peerId){if(sharedDisplayStream&&peerId)hostPeer.call(peerId,sharedDisplayStream);}
       async function startCapture(){
-        const button=$('#enablePcSound');button.disabled=true;$('#hostStatus').textContent='Starting automatic screen and sound…';
+        const button=$('#enablePcSound');button.disabled=true;$('#hostStatus').textContent='Choose a screen and enable Share system audio…';
         try{
           hostCapture=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:30}},audio:true});
           sharedDisplayStream=hostCapture;button.textContent='Smooth video enabled';$('#hostStatus').textContent='Ready — live video and sound will play on the phone';broadcastDisplay(lastPhonePeer);

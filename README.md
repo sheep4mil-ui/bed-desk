@@ -10,9 +10,10 @@ Tap **Full screen** to turn the live PC image itself into the trackpad. Tapping
 a text field asks iOS to open its keyboard automatically; the **Keyboard**
 button is available when Safari requires an extra user tap.
 
-The Bed Desk Streamer starts smooth video and PC system audio automatically.
-The phone switches from snapshots to a direct WebRTC stream when it connects.
-Tap **Sound** on the phone if iOS does not begin playback automatically.
+For smooth video and PC audio without installing another program, click
+**Enable smooth video + sound** once in the PC setup tab, choose the screen,
+and enable **Share system audio**. The phone then switches from snapshots to a
+direct WebRTC stream. Tap **Sound** if iOS does not begin playback automatically.
 
 ## Start
 
