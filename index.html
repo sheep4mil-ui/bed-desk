@@ -130,7 +130,9 @@
     async function focusedControlAcceptsText(){
       try{const response=await fetch(remoteUrl('focus'),{headers:{'X-Remote-Pin':pin},cache:'no-store'});return response.ok&&(await response.json()).text===true;}catch{return false;}
     }
-    function showPhoneKeyboard(){const input=$('#keyboardCapture');input.focus({preventScroll:true});input.click();}
+    const keyboardSentinel='\u200B';
+    function primeKeyboardInput(input){input.value=keyboardSentinel;try{input.setSelectionRange(input.value.length,input.value.length);}catch{}}
+    function showPhoneKeyboard(){const input=$('#keyboardCapture');primeKeyboardInput(input);input.focus({preventScroll:true});input.click();}
     function toggleFullscreen(){
       const active=$('#screen').classList.toggle('fullscreen');
       $('#fullscreenButton').textContent=active?'Exit':'Full screen';
@@ -225,11 +227,14 @@
     $('#fullscreenButton').onclick=e=>{e.stopPropagation();toggleFullscreen();};
     $('#keyboardButton').onclick=e=>{e.stopPropagation();showPhoneKeyboard();};
     $('#keyboardCapture').addEventListener('beforeinput',e=>{
-      if(e.inputType==='deleteContentBackward'){e.preventDefault();action({type:'key',key:'backspace'},true);}
+      if(e.inputType==='deleteContentBackward'){e.preventDefault();action({type:'key',key:'backspace'},true);primeKeyboardInput(e.target);}
       if(e.inputType==='insertLineBreak'){e.preventDefault();action({type:'key',key:'enter'},true);}
     });
-    $('#keyboardCapture').addEventListener('input',e=>{if(e.target.value){action({type:'text',text:e.target.value},true);e.target.value='';}});
-    $('#keyboardCapture').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();action({type:'key',key:'enter'},true);}});
+    $('#keyboardCapture').addEventListener('input',e=>{const typed=e.target.value.split(keyboardSentinel).join('');if(typed)action({type:'text',text:typed},true);primeKeyboardInput(e.target);});
+    $('#keyboardCapture').addEventListener('keydown',e=>{
+      if(e.key==='Backspace'){e.preventDefault();action({type:'key',key:'backspace'},true);primeKeyboardInput(e.target);}
+      if(e.key==='Enter'){e.preventDefault();action({type:'key',key:'enter'},true);}
+    });
 
     const pad=$('#pad'),screenSurface=$('#screen'); let touches=new Map(), moved=0, lastMove=0;
     let queuedX=0,queuedY=0,queuedScroll=0,motionSending=false;
